@@ -1,0 +1,38 @@
+{
+  "info": {
+    "_postman_id": "ms-pedido-collection",
+    "name": "MS-Pedido Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Registrar Pedido",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"usuarioId\": 1,\n  \"items\": [\n    {\n      \"productoId\": 101,\n      \"nombreProducto\": \"Coleccion Creativa\",\n      \"precioUnitario\": 19990.0,\n      \"cantidad\": 2\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8083/api/pedidos",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8083",
+          "path": [
+            "api",
+            "pedidos"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

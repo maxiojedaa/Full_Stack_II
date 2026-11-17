@@ -1,0 +1,122 @@
+{
+"info": {
+"_postman_id": "ms-stock-collection",
+"name": "MS-Stock Collection",
+"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+},
+"item": [
+{
+"name": "Crear Producto Stock",
+"request": {
+"method": "POST",
+"header": [],
+"url": {
+"raw": "http://localhost:8088/api/productos?nombre=Juego de Mesas&stock=20&minStock=4",
+"protocol": "http",
+"host": [
+"localhost"
+],
+"port": "8088",
+"path": [
+"api",
+"productos"
+],
+"query": [
+{
+"key": "nombre",
+"value": "Juego de Mesas"
+},
+{
+"key": "stock",
+"value": "20"
+},
+{
+"key": "minStock",
+"value": "4"
+}
+]
+}
+},
+"response": []
+},
+{
+"name": "Actualizar Stock de Producto",
+"request": {
+"method": "PUT",
+"header": [],
+"url": {
+"raw": "http://localhost:8088/api/productos/101/stock?stock=25",
+"protocol": "http",
+"host": [
+"localhost"
+],
+"port": "8088",
+"path": [
+"api",
+"productos",
+"101",
+"stock"
+],
+"query": [
+{
+"key": "stock",
+"value": "25"
+}
+]
+}
+},
+"response": []
+},
+{
+"name": "Verificar Stock Bajo",
+"request": {
+"method": "GET",
+"header": [],
+"url": {
+"raw": "http://localhost:8088/api/productos/stock-bajo",
+"protocol": "http",
+"host": [
+"localhost"
+],
+"port": "8088",
+"path": [
+"api",
+"productos",
+"stock-bajo"
+]
+}
+},
+"response": []
+},
+{
+"name": "Registrar Venta",
+"request": {
+"method": "POST",
+"header": [],
+"url": {
+"raw": "http://localhost:8088/api/ventas?productoId=101&cantidad=2",
+"protocol": "http",
+"host": [
+"localhost"
+],
+"port": "8088",
+"path": [
+"api",
+"ventas"
+],
+"query": [
+{
+"key": "productoId",
+"value": "101"
+},
+{
+"key": "cantidad",
+"value": "2"
+}
+]
+}
+},
+"response": []
+}
+]
+}

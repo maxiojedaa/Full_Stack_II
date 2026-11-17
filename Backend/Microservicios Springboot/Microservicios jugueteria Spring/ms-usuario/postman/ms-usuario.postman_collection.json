@@ -1,0 +1,160 @@
+{
+  "info": {
+    "name": "Pixel & Toys — ms-usuario",
+    "description": "Ejecutar registro y login primero. El paso 7 requiere una cuenta ADMIN. Usar otro email si el registro ya existe.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8084",
+      "type": "string"
+    },
+    {
+      "key": "email",
+      "value": "usuario@pixeltoys.example",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "DemoPixel2026!",
+      "type": "string"
+    },
+    {
+      "key": "usuarioId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Registrar usuario",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/usuarios/registro",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"Usuario de prueba\",\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Usuario creado\", () => pm.response.to.have.status(201));",
+              "if (pm.response.code === 201) pm.collectionVariables.set(\"usuarioId\", String(pm.response.json().id));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Login y guardar token",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/usuarios/login",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Login correcto\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) { const r = pm.response.json(); pm.collectionVariables.set(\"token\", r.token); pm.collectionVariables.set(\"usuarioId\", String(r.usuario.id)); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Consultar mi usuario",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/usuarios/{{usuarioId}}"
+      }
+    },
+    {
+      "name": "4. Agregar favorito (repetir no duplica)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/usuarios/{{usuarioId}}/favoritos/101"
+      }
+    },
+    {
+      "name": "5. Consultar favoritos",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/usuarios/{{usuarioId}}/favoritos"
+      }
+    },
+    {
+      "name": "6. Eliminar favorito",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{baseUrl}}/api/usuarios/{{usuarioId}}/favoritos/101"
+      }
+    },
+    {
+      "name": "7. Listar usuarios (requiere token ADMIN)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/usuarios"
+      }
+    }
+  ]
+}
