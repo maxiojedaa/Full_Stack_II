@@ -7,8 +7,8 @@ import { ToastAlerta, MENSAJE_AGREGADO_CARRITO, type TipoAlerta } from './Alerta
 /**
  * Componente `CatalogPage`:
  * Muestra el catálogo principal de juguetes, permite buscar, gestionar favoritos,
- * sincronizar el contador del carrito y agregar productos mostrando notificaciones
- * visuales en pantalla con `ToastAlerta`.
+ * navegar al detalle de cada producto, sincronizar el contador del carrito y agregar
+ * productos mostrando notificaciones visuales en pantalla con `ToastAlerta`.
  */
 export const CatalogPage = () => {
   // Productos oficiales iniciales de respaldo antes o en caso de fallo de sincronización API
@@ -132,6 +132,22 @@ export const CatalogPage = () => {
 
     const clave = String(idOrNombre).trim().toLowerCase();
     return mapaImágenes[clave] || '/Img/LogoPixelToysIII.png';
+  };
+
+  /**
+   * Navega hacia la vista de detalle del producto seleccionado, enviando el
+   * producto y su imagen local por state para una carga inmediata.
+   *
+   * @param prod Producto seleccionado en el catálogo
+   */
+  const irAlDetalle = (prod: ProductoDTO) => {
+    if (!prod?.id) return;
+    navigate(`/producto/${prod.id}`, {
+      state: {
+        producto: prod,
+        imagen: obtenerImagenLocal(prod.id),
+      },
+    });
   };
 
   /**
@@ -321,7 +337,11 @@ export const CatalogPage = () => {
           <div style={{ position: 'relative', zIndex: 10, backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(8px)', padding: '32px', borderRadius: '16px', textAlign: 'center', color: '#ffffff', border: '1px solid rgba(255,255,255,0.1)', maxWidth: '400px', margin: '0 16px' }}>
             <p style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#cbd5e1', marginBottom: '8px', fontWeight: '600' }}>Descubre nuestros favoritos</p>
             <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', marginBottom: '24px' }}>Robot de Madera</h1>
-            <button style={{ backgroundColor: '#ffffff', color: '#020617', fontWeight: '600', padding: '8px 24px', borderRadius: '9999px', border: 'none', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+            <button
+              type="button"
+              onClick={() => navigate('/producto/101')}
+              style={{ backgroundColor: '#ffffff', color: '#020617', fontWeight: '600', padding: '8px 24px', borderRadius: '9999px', border: 'none', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
+            >
               Ver producto
             </button>
           </div>
@@ -340,16 +360,24 @@ export const CatalogPage = () => {
             return (
               <div key={prod.id || prod.nombre} style={{ backgroundColor: '#ffffff', borderRadius: '16px', padding: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', border: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div>
-                  <div style={{ height: '224px', borderRadius: '12px', overflow: 'hidden', marginBottom: '16px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                  {/* Contenedor de imagen clickeable para abrir el detalle del producto */}
+                  <div
+                    onClick={() => irAlDetalle(prod)}
+                    style={{ height: '224px', borderRadius: '12px', overflow: 'hidden', marginBottom: '16px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', cursor: 'pointer' }}
+                  >
                     <img
                       src={obtenerImagenLocal(prod.id)}
                       alt={prod.nombre}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
 
-                    {/* Botón interactivo del Corazón */}
+                    {/* Botón interactivo del Corazón (detiene propagación para no abrir el detalle) */}
                     <button
-                      onClick={() => toggleFavorito(prod)}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorito(prod);
+                      }}
                       style={{
                         position: 'absolute', top: '12px', right: '12px',
                         backgroundColor: 'rgba(255,255,255,0.9)', border: 'none',
@@ -362,7 +390,15 @@ export const CatalogPage = () => {
                       {esFavorito ? '❤️' : '🤍'}
                     </button>
                   </div>
-                  <h3 style={{ fontWeight: 'bold', color: '#0f172a', fontSize: '1.125rem', marginBottom: '4px' }}>{prod.nombre}</h3>
+
+                  {/* Título clickeable para ir al detalle */}
+                  <h3
+                    onClick={() => irAlDetalle(prod)}
+                    style={{ fontWeight: 'bold', color: '#0f172a', fontSize: '1.125rem', marginBottom: '4px', cursor: 'pointer' }}
+                  >
+                    {prod.nombre}
+                  </h3>
+
                   <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '16px', minHeight: '40px' }}>
                     {prod.descripcion || 'Juguete didáctico y creativo de alta calidad.'}
                   </p>
@@ -371,7 +407,11 @@ export const CatalogPage = () => {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #f1f5f9' }}>
                   <span style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a' }}>${prod.precio?.toLocaleString('es-CL')}</span>
                   <button
-                    onClick={() => agregarAlCarrito(prod)}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      agregarAlCarrito(prod);
+                    }}
                     style={{ backgroundColor: '#2563eb', color: '#ffffff', fontSize: '0.875rem', fontWeight: '600', padding: '10px 16px', borderRadius: '12px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px rgba(37, 99, 235, 0.2)' }}
                   >
                     <span>🛒</span>

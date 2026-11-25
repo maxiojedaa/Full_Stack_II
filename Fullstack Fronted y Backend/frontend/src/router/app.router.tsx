@@ -3,6 +3,7 @@ import { ProtectedRoute } from './ProtectedRoute';
 import { LoginPage } from '../client/page/LoginPage';
 import { AdminPage } from '../client/page/AdminPage';
 import { CatalogPage } from '../client/page/CatalogoPage';
+import { ProductoDetallePage } from '../client/page/ProductoDetallePage';
 import { CarritoPage } from '../client/page/CarritoPage';
 import { ProfilePage } from '../client/page/ProfilePage';
 import { StockPage } from '../client/page/StockPage';
@@ -14,7 +15,8 @@ import { FavoritosPage } from '../client/page/FavoritosPage';
 
 /**
  * Definición centralizada de rutas de la aplicación.
- * Las rutas privadas requieren sesión válida y las administrativas exigen rol `ADMIN`.
+ * Las rutas privadas requieren sesión válida mediante `ProtectedRoute`
+ * y las administrativas exigen rol `ADMIN`.
  */
 export const rootRouter = createBrowserRouter([
   {
@@ -26,6 +28,15 @@ export const rootRouter = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <CatalogPage />
+      </ProtectedRoute>
+    ),
+  },
+  // Ruta protegida para el detalle individual de cada producto (/producto/:id)
+  {
+    path: '/producto/:id',
+    element: (
+      <ProtectedRoute>
+        <ProductoDetallePage />
       </ProtectedRoute>
     ),
   },
@@ -101,6 +112,7 @@ export const rootRouter = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
+  // Cualquier ruta desconocida redirige al login
   {
     path: '*',
     element: <Navigate to="/login" replace />,
