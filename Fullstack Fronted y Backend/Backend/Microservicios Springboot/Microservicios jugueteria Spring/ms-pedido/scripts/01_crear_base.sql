@@ -1,6 +1,6 @@
 -- Crear la base de datos si no existe
 CREATE DATABASE IF NOT EXISTS pedidos_db2;
-USE pedidos_db;
+USE pedidos_db2;
 
 -- Tabla principal de pedidos
 CREATE TABLE IF NOT EXISTS pedidos (

@@ -5,6 +5,47 @@ import { carritoService } from '../../services/carrito_services';
 import { ToastAlerta, MENSAJE_AGREGADO_CARRITO, type TipoAlerta } from './AlertaAñadidoP';
 
 /**
+ * Obtiene el ID del usuario autenticado desde `localStorage` o del payload del JWT,
+ * cayendo en `1` solo si no hay sesión guardada.
+ */
+const obtenerUsuarioIdActual = (): number => {
+  try {
+    const idDirecto = Number(localStorage.getItem('usuarioId'));
+    if (!Number.isNaN(idDirecto) && idDirecto > 0) {
+      return idDirecto;
+    }
+
+    const raw =
+      localStorage.getItem('usuario') ||
+      localStorage.getItem('user') ||
+      localStorage.getItem('authUser') ||
+      localStorage.getItem('sesionUsuario');
+
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const id = Number(parsed?.id ?? parsed?.usuario?.id ?? parsed?.user?.id);
+      if (!Number.isNaN(id) && id > 0) {
+        return id;
+      }
+    }
+
+    const token = localStorage.getItem('token');
+    if (token && token.split('.').length === 3) {
+      const payloadBase64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payloadJson = JSON.parse(atob(payloadBase64));
+      const tokenId = Number(payloadJson?.id ?? payloadJson?.usuarioId ?? payloadJson?.sub);
+      if (!Number.isNaN(tokenId) && tokenId > 0) {
+        return tokenId;
+      }
+    }
+  } catch (error) {
+    console.error('Error al resolver usuarioId desde sesión:', error);
+  }
+
+  return 1;
+};
+
+/**
  * Componente `CatalogPage`:
  * Muestra el catálogo principal de juguetes, permite buscar, gestionar favoritos,
  * navegar al detalle de cada producto, sincronizar el contador del carrito y agregar
@@ -52,12 +93,12 @@ export const CatalogPage = () => {
     return guardados ? JSON.parse(guardados) : [];
   });
 
-  const usuarioId = 1; // Usuario sincronizado con el flujo actual
+  const usuarioId = obtenerUsuarioIdActual();
 
   /**
    * Consulta el carrito del usuario y actualiza el contador de ítems en la barra superior.
    */
-  const actualizarContadorCarrito = async () => {
+  const actualizarContadorCarrito = useCallback(async () => {
     try {
       const carrito = await carritoService.obtenerCarritoPorUsuario(usuarioId);
       const itemsSeguros = Array.isArray(carrito?.items) ? carrito.items : [];
@@ -69,11 +110,11 @@ export const CatalogPage = () => {
     } catch (error) {
       console.error('Error al actualizar el contador:', error);
     }
-  };
+  }, [usuarioId]);
 
   useEffect(() => {
     actualizarContadorCarrito();
-  }, []);
+  }, [actualizarContadorCarrito]);
 
   /**
    * Sincroniza la lista de productos desde el microservicio de catálogo en segundo plano.

@@ -14,6 +14,47 @@ const MIN_CANTIDAD_POR_PRODUCTO = 1;
 const MAX_CANTIDAD_POR_PRODUCTO = 10;
 
 /**
+ * Obtiene el ID del usuario autenticado desde `localStorage` y cae en `1`
+ * solo si no existe una sesión guardada con un ID válido.
+ */
+const obtenerUsuarioIdActual = (): number => {
+  try {
+    const raw =
+      localStorage.getItem('usuario') ||
+      localStorage.getItem('user') ||
+      localStorage.getItem('authUser') ||
+      localStorage.getItem('sesionUsuario');
+
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const id = Number(parsed?.id ?? parsed?.usuario?.id ?? parsed?.user?.id);
+      if (!Number.isNaN(id) && id > 0) {
+        return id;
+      }
+    }
+
+    const idDirecto = Number(localStorage.getItem('usuarioId'));
+    if (!Number.isNaN(idDirecto) && idDirecto > 0) {
+      return idDirecto;
+    }
+
+    const token = localStorage.getItem('token');
+    if (token && token.split('.').length === 3) {
+      const payloadBase64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payloadJson = JSON.parse(atob(payloadBase64));
+      const tokenId = Number(payloadJson?.id ?? payloadJson?.usuarioId ?? payloadJson?.sub);
+      if (!Number.isNaN(tokenId) && tokenId > 0) {
+        return tokenId;
+      }
+    }
+  } catch (error) {
+    console.error('Error al resolver usuarioId desde sesión:', error);
+  }
+
+  return 1;
+};
+
+/**
  * Componente `CarritoPage`:
  * Gestiona la visualización del carrito, traduce los IDs de productos a nombres
  * comerciales, permite sumar (`+`) o restar (`-`) 1 unidad por clic independiente
@@ -40,7 +81,7 @@ export const CarritoPage: React.FC = () => {
   } | null>(null);
 
   const navigate = useNavigate();
-  const usuarioId = 1; // ID del usuario actual sincronizado con el backend
+  const usuarioId = obtenerUsuarioIdActual();
 
   /**
    * Diccionario local para traducir el `productoId` (ej. 101)
@@ -58,7 +99,7 @@ export const CarritoPage: React.FC = () => {
   /**
    * Obtiene el carrito del usuario desde el microservicio backend.
    */
-  const cargarCarrito = async () => {
+  const cargarCarrito = useCallback(async () => {
     try {
       setCargando(true);
       const data = await carritoService.obtenerCarritoPorUsuario(usuarioId);
@@ -69,11 +110,11 @@ export const CarritoPage: React.FC = () => {
     } finally {
       setCargando(false);
     }
-  };
+  }, [usuarioId]);
 
   useEffect(() => {
     cargarCarrito();
-  }, []);
+  }, [cargarCarrito]);
 
   /**
    * Incrementa en 1 unidad el producto en el carrito hasta el límite
@@ -291,11 +332,27 @@ export const CarritoPage: React.FC = () => {
         }}
       >
         {/* Cabecera y botón de cierre */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
-          <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1a202c', margin: 0 }}>Tu Carrito</h2>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '25px',
+          }}
+        >
+          <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1a202c', margin: 0 }}>
+            Tu Carrito
+          </h2>
           <button
             onClick={() => navigate('/catalogo')}
-            style={{ background: 'none', border: 'none', fontSize: '22px', color: '#a0aec0', cursor: 'pointer', fontWeight: 'bold' }}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '22px',
+              color: '#a0aec0',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+            }}
             title="Cerrar"
           >
             ✕
@@ -305,10 +362,20 @@ export const CarritoPage: React.FC = () => {
         {/* Validar si el carrito está vacío */}
         {!carrito || !carrito.items || carrito.items.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px 0' }}>
-            <p style={{ color: '#718096', fontSize: '16px', marginBottom: '20px' }}>Tu carrito está vacío.</p>
+            <p style={{ color: '#718096', fontSize: '16px', marginBottom: '20px' }}>
+              Tu carrito está vacío.
+            </p>
             <button
               onClick={() => navigate('/catalogo')}
-              style={{ padding: '10px 20px', backgroundColor: '#3182ce', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#3182ce',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+              }}
             >
               Volver a la Tienda
             </button>
@@ -316,7 +383,17 @@ export const CarritoPage: React.FC = () => {
         ) : (
           <div>
             {/* Lista de productos con scroll vertical */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '380px', overflowY: 'auto', marginBottom: '25px', paddingRight: '5px' }}>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '20px',
+                maxHeight: '380px',
+                overflowY: 'auto',
+                marginBottom: '25px',
+                paddingRight: '5px',
+              }}
+            >
               {carrito.items.map((item) => {
                 const nombreReal = nombresProductosMap[item.productoId] || `Juguete #${item.productoId}`;
                 const ocupado = actualizandoItemId === item.id;
@@ -335,11 +412,30 @@ export const CarritoPage: React.FC = () => {
                   >
                     {/* Información visual del producto */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                      <div style={{ width: '65px', height: '65px', backgroundColor: '#edf2f7', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', border: '1px solid #e2e8f0' }}>
+                      <div
+                        style={{
+                          width: '65px',
+                          height: '65px',
+                          backgroundColor: '#edf2f7',
+                          borderRadius: '10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '24px',
+                          border: '1px solid #e2e8f0',
+                        }}
+                      >
                         📦
                       </div>
                       <div>
-                        <h4 style={{ margin: '0 0 5px 0', fontSize: '16px', fontWeight: 'bold', color: '#1a202c' }}>
+                        <h4
+                          style={{
+                            margin: '0 0 5px 0',
+                            fontSize: '16px',
+                            fontWeight: 'bold',
+                            color: '#1a202c',
+                          }}
+                        >
                           {nombreReal}
                         </h4>
                         <p style={{ margin: 0, fontSize: '15px', color: '#718096', fontWeight: '500' }}>
@@ -350,7 +446,15 @@ export const CarritoPage: React.FC = () => {
 
                     {/* Controles -, cantidad, + y botón eliminar */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #cbd5e0', borderRadius: '6px', overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          border: '1px solid #cbd5e0',
+                          borderRadius: '6px',
+                          overflow: 'hidden',
+                        }}
+                      >
                         <button
                           type="button"
                           disabled={ocupado || procesandoPedido}
@@ -369,7 +473,15 @@ export const CarritoPage: React.FC = () => {
                         >
                           -
                         </button>
-                        <span style={{ padding: '5px 14px', fontSize: '14px', fontWeight: 'bold', color: '#1a202c', backgroundColor: '#fff' }}>
+                        <span
+                          style={{
+                            padding: '5px 14px',
+                            fontSize: '14px',
+                            fontWeight: 'bold',
+                            color: '#1a202c',
+                            backgroundColor: '#fff',
+                          }}
+                        >
                           {item.cantidad}
                         </span>
                         <button
@@ -377,7 +489,11 @@ export const CarritoPage: React.FC = () => {
                           disabled={ocupado || procesandoPedido || alcanzoMaximo}
                           onClick={() => handleIncrementarCantidad(item)}
                           aria-label={`Aumentar cantidad de ${nombreReal}`}
-                          title={alcanzoMaximo ? `Máximo ${MAX_CANTIDAD_POR_PRODUCTO} unidades` : 'Sumar 1 unidad'}
+                          title={
+                            alcanzoMaximo
+                              ? `Máximo ${MAX_CANTIDAD_POR_PRODUCTO} unidades`
+                              : 'Sumar 1 unidad'
+                          }
                           style={{
                             padding: '5px 10px',
                             backgroundColor: alcanzoMaximo ? '#e2e8f0' : '#f8fafc',
@@ -396,7 +512,14 @@ export const CarritoPage: React.FC = () => {
                         type="button"
                         disabled={ocupado || procesandoPedido}
                         onClick={() => handleEliminarItem(item.id)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: '#e53e3e', padding: '5px' }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontSize: '18px',
+                          color: '#e53e3e',
+                          padding: '5px',
+                        }}
                         title="Eliminar producto"
                       >
                         🗑️
@@ -408,7 +531,16 @@ export const CarritoPage: React.FC = () => {
             </div>
 
             {/* Total acumulado calculado por el backend */}
-            <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+            <div
+              style={{
+                borderTop: '1px solid #e2e8f0',
+                paddingTop: '20px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '25px',
+              }}
+            >
               <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#1a202c' }}>Total:</span>
               <span style={{ fontSize: '26px', fontWeight: 'bold', color: '#3182ce' }}>
                 ${carrito.total?.toLocaleString('es-CL')}
@@ -416,11 +548,30 @@ export const CarritoPage: React.FC = () => {
             </div>
 
             {/* Botones inferiores de acción */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '10px',
+              }}
+            >
               <button
                 type="button"
                 onClick={handleVaciarCarrito}
-                style={{ padding: '10px 18px', backgroundColor: '#fff', color: '#e53e3e', border: '1px solid #fc8181', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '5px' }}
+                style={{
+                  padding: '10px 18px',
+                  backgroundColor: '#fff',
+                  color: '#e53e3e',
+                  border: '1px solid #fc8181',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
               >
                 🗑️ Vaciar Carrito
               </button>
@@ -429,7 +580,16 @@ export const CarritoPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/catalogo')}
-                  style={{ padding: '10px 18px', backgroundColor: '#718096', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px' }}
+                  style={{
+                    padding: '10px 18px',
+                    backgroundColor: '#718096',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                  }}
                 >
                   Seguir Comprando
                 </button>
@@ -437,7 +597,16 @@ export const CarritoPage: React.FC = () => {
                   type="button"
                   onClick={handleIniciarPago}
                   disabled={procesandoPedido}
-                  style={{ padding: '10px 24px', backgroundColor: '#3182ce', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}
+                  style={{
+                    padding: '10px 24px',
+                    backgroundColor: '#3182ce',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                  }}
                 >
                   {procesandoPedido ? 'Procesando...' : 'Proceder al Pago'}
                 </button>
@@ -594,25 +763,97 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
   };
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-      <div style={{ backgroundColor: '#fff', width: '100%', maxWidth: '450px', borderRadius: '16px', padding: '30px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', color: '#1a202c' }}>Pasarela de Pagos</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#a0aec0' }}>✕</button>
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: '#fff',
+          width: '100%',
+          maxWidth: '450px',
+          borderRadius: '16px',
+          padding: '30px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '20px',
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', color: '#1a202c' }}>
+            Pasarela de Pagos
+          </h3>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '20px',
+              cursor: 'pointer',
+              color: '#a0aec0',
+            }}
+          >
+            ✕
+          </button>
         </div>
 
-        <div style={{ marginBottom: '20px', padding: '12px', backgroundColor: '#f7fafc', borderRadius: '8px', border: '1px solid #edf2f7' }}>
+        <div
+          style={{
+            marginBottom: '20px',
+            padding: '12px',
+            backgroundColor: '#f7fafc',
+            borderRadius: '8px',
+            border: '1px solid #edf2f7',
+          }}
+        >
           <p style={{ margin: 0, fontSize: '14px', color: '#4a5568' }}>Total a pagar:</p>
-          <p style={{ margin: '5px 0 0 0', fontSize: '24px', fontWeight: 'bold', color: '#3182ce' }}>${total.toLocaleString('es-CL')}</p>
+          <p style={{ margin: '5px 0 0 0', fontSize: '24px', fontWeight: 'bold', color: '#3182ce' }}>
+            ${total.toLocaleString('es-CL')}
+          </p>
         </div>
 
-        <form onSubmit={handleSubmitPago} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        <form
+          onSubmit={handleSubmitPago}
+          style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}
+        >
           <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '5px', color: '#2d3748' }}>Método de Pago</label>
+            <label
+              style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '600',
+                marginBottom: '5px',
+                color: '#2d3748',
+              }}
+            >
+              Método de Pago
+            </label>
             <select
               value={metodoPago}
               onChange={(e) => setMetodoPago(e.target.value)}
-              style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e0', fontSize: '14px', backgroundColor: '#fff' }}
+              style={{
+                width: '100%',
+                padding: '10px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e0',
+                fontSize: '14px',
+                backgroundColor: '#fff',
+              }}
             >
               <option value="TARJETA">Tarjeta de Crédito / Débito</option>
               <option value="WEBPAY">WebPay Plus</option>
@@ -623,7 +864,17 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
           {(metodoPago === 'TARJETA' || metodoPago === 'WEBPAY') && (
             <>
               <div>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '5px', color: '#2d3748' }}>Número de Tarjeta</label>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    marginBottom: '5px',
+                    color: '#2d3748',
+                  }}
+                >
+                  Número de Tarjeta
+                </label>
                 <input
                   type="text"
                   placeholder="4000 1234 5678 9010"
@@ -631,24 +882,56 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
                   value={numeroTarjeta}
                   onChange={(e) => setNumeroTarjeta(e.target.value)}
                   required
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e0', fontSize: '14px' }}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e0',
+                    fontSize: '14px',
+                  }}
                 />
               </div>
 
               <div style={{ display: 'flex', gap: '10px' }}>
                 <div style={{ flex: 2 }}>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '5px', color: '#2d3748' }}>Nombre del Titular</label>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      marginBottom: '5px',
+                      color: '#2d3748',
+                    }}
+                  >
+                    Nombre del Titular
+                  </label>
                   <input
                     type="text"
                     placeholder=""
                     value={nombreTitular}
                     onChange={(e) => setNombreTitular(e.target.value)}
                     required
-                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e0', fontSize: '14px' }}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e0',
+                      fontSize: '14px',
+                    }}
                   />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '5px', color: '#2d3748' }}>CVV</label>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      marginBottom: '5px',
+                      color: '#2d3748',
+                    }}
+                  >
+                    CVV
+                  </label>
                   <input
                     type="password"
                     placeholder="123"
@@ -656,7 +939,13 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
                     value={cvv}
                     onChange={(e) => setCvv(e.target.value)}
                     required
-                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e0', fontSize: '14px' }}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e0',
+                      fontSize: '14px',
+                    }}
                   />
                 </div>
               </div>
@@ -666,11 +955,28 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
           {metodoPago === 'TRANSFERENCIA' && (
             <>
               <div>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '5px', color: '#2d3748' }}>Banco de Origen</label>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    marginBottom: '5px',
+                    color: '#2d3748',
+                  }}
+                >
+                  Banco de Origen
+                </label>
                 <select
                   value={bancoSeleccionado}
                   onChange={(e) => setBancoSeleccionado(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e0', fontSize: '14px', backgroundColor: '#fff' }}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e0',
+                    fontSize: '14px',
+                    backgroundColor: '#fff',
+                  }}
                 >
                   <option value="Banco Estado">Banco Estado</option>
                   <option value="Banco de Chile">Banco de Chile</option>
@@ -681,26 +987,58 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '5px', color: '#2d3748' }}>RUT del Titular</label>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    marginBottom: '5px',
+                    color: '#2d3748',
+                  }}
+                >
+                  RUT del Titular
+                </label>
                 <input
                   type="text"
                   placeholder="12.345.678-9"
                   value={rutTransferencia}
                   onChange={(e) => setRutTransferencia(e.target.value)}
                   required
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e0', fontSize: '14px' }}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e0',
+                    fontSize: '14px',
+                  }}
                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '5px', color: '#2d3748' }}>Correo para Comprobante</label>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    marginBottom: '5px',
+                    color: '#2d3748',
+                  }}
+                >
+                  Correo para Comprobante
+                </label>
                 <input
                   type="email"
                   placeholder="correo@ejemplo.com"
                   value={correoComprobante}
                   onChange={(e) => setCorreoComprobante(e.target.value)}
                   required
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e0', fontSize: '14px' }}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e0',
+                    fontSize: '14px',
+                  }}
                 />
               </div>
             </>
@@ -709,7 +1047,17 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
           <button
             type="submit"
             disabled={cargandoPago}
-            style={{ marginTop: '10px', padding: '12px', backgroundColor: '#3182ce', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}
+            style={{
+              marginTop: '10px',
+              padding: '12px',
+              backgroundColor: '#3182ce',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              fontWeight: 'bold',
+              fontSize: '16px',
+              cursor: 'pointer',
+            }}
           >
             {cargandoPago ? 'Procesando pago...' : `Pagar $${total.toLocaleString('es-CL')}`}
           </button>

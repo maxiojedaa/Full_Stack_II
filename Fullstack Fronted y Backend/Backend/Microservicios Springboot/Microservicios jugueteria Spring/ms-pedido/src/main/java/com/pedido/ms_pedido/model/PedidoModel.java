@@ -22,8 +22,7 @@ public class PedidoModel {
 
     private LocalDateTime fechaCreacion;
 
-    // Relación de uno a muchos con los ítems del pedido (HU55)
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "pedido_id")
+   // Relación bidireccional: ItemPedidoModel es dueño de la FK pedido_id
+    @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ItemPedidoModel> items;
 }

@@ -14,15 +14,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@Service
+import org.springframework.transaction.annotation.Transactional;
 
+@Service
 public class PedidoService {
+
     @Autowired
     private PedidoRepository pedidoRepository;
 
     /**
      * Registra un nuevo pedido automáticamente al confirmar la compra (HU53, HU54).
-     * 
+     *
      * @param request Datos del pedido enviado por el usuario.
      * @return El pedido guardado convertido en DTO.
      */
@@ -47,10 +49,7 @@ public class PedidoService {
             item.setNombreProducto(dto.getNombreProducto());
             item.setPrecioUnitario(dto.getPrecioUnitario());
             item.setCantidad(dto.getCantidad());
-
-            // Ahora sí compilará perfecto y le pasará el ID del pedido
             item.setPedido(pedido);
-
             itemsModel.add(item);
         }
 
@@ -81,6 +80,34 @@ public class PedidoService {
     }
 
     /**
+     * Obtiene la lista completa de todos los pedidos registrados.
+     */
+    public List<PedidoResponseDTO> obtenerTodosLosPedidos() {
+        List<PedidoModel> pedidos = pedidoRepository.findAll();
+        return pedidos.stream()
+                .map(this::mapearADTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Actualiza el estado de un pedido existente (por ejemplo, de PENDIENTE a
+     * CANCELADO).
+     */
+    public PedidoResponseDTO cambiarEstado(Long id, String nuevoEstado) {
+        PedidoModel pedido = pedidoRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Pedido no encontrado con ID: " + id));
+
+        String estadoNormalizado = nuevoEstado == null ? "" : nuevoEstado.trim().toUpperCase();
+        if (!estadoNormalizado.equals("PENDIENTE") && !estadoNormalizado.equals("CANCELADO")) {
+            throw new IllegalArgumentException("Estado no válido: " + nuevoEstado);
+        }
+
+        pedido.setEstado(estadoNormalizado);
+        PedidoModel actualizado = pedidoRepository.save(pedido);
+        return mapearADTO(actualizado);
+    }
+
+    /**
      * Método auxiliar para transformar Entidad a DTO.
      */
     private PedidoResponseDTO mapearADTO(PedidoModel pedido) {
@@ -104,8 +131,10 @@ public class PedidoService {
         return dto;
     }
 
-    public List<PedidoResponseDTO> obtenerTodosLosPedidos() {
-    List<PedidoModel> pedidos = pedidoRepository.findAll();
-    return pedidos.stream().map(this::mapearADTO).collect(Collectors.toList());
-}
+    @Transactional
+    public void eliminarPedido(Long id) {
+        PedidoModel pedido = pedidoRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Pedido no encontrado con ID: " + id));
+        pedidoRepository.delete(pedido);
+    }
 }

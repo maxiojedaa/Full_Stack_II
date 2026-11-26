@@ -8,10 +8,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/pedidos")
 public class PedidoController {
+
     @Autowired
     private PedidoService pedidoService;
 
@@ -46,13 +48,32 @@ public class PedidoController {
     }
 
     /**
-     * Endpoint para obtener la lista completa de todos los pedidos registrados en
-     * el sistema.
+     * Endpoint para obtener la lista completa de todos los pedidos registrados en el sistema.
      * Ruta: GET /api/pedidos
      */
     @GetMapping
     public ResponseEntity<List<PedidoResponseDTO>> obtenerTodosLosPedidos() {
         List<PedidoResponseDTO> pedidos = pedidoService.obtenerTodosLosPedidos();
         return ResponseEntity.ok(pedidos);
+    }
+
+    /**
+     * Endpoint para cambiar el estado de un pedido (ej. PENDIENTE -> CANCELADO).
+     * Ruta: PATCH /api/pedidos/{id}/estado
+     */
+    @PatchMapping("/{id}/estado")
+    public ResponseEntity<PedidoResponseDTO> cambiarEstado(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body
+    ) {
+        String nuevoEstado = body.get("estado");
+        PedidoResponseDTO actualizado = pedidoService.cambiarEstado(id, nuevoEstado);
+        return ResponseEntity.ok(actualizado);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> eliminarPedido(@PathVariable Long id) {
+        pedidoService.eliminarPedido(id);
+        return ResponseEntity.noContent().build();
     }
 }

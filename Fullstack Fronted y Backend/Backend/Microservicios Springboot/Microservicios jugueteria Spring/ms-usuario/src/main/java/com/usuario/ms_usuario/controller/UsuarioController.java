@@ -82,4 +82,13 @@ public class UsuarioController {
             @PathVariable @Positive Long productoId) {
         return usuarioService.eliminarFavorito(usuarioId, productoId);
     }
+
+    @DeleteMapping("/{usuarioId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Eliminar un usuario por ID (solo ADMIN)")
+    public ResponseEntity<Void> eliminarUsuario(@PathVariable @Positive Long usuarioId) {
+        usuarioService.eliminarUsuario(usuarioId);
+        return ResponseEntity.noContent().build();
+    }
 }

@@ -109,4 +109,11 @@ public class UsuarioService {
                     "La contraseña supera los 72 bytes UTF-8 admitidos por BCrypt");
         }
     }
+
+    public void eliminarUsuario(Long id) {
+        UsuarioModel usuario = buscarParaActualizar(id);
+        usuario.getFavoritos().clear();
+        usuarioRepository.delete(usuario);
+        usuarioRepository.flush();
+    }
 }
