@@ -1,124 +1,243 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { carritoService } from '../../services/carrito_services';
+import { catalogoService, type ProductoDTO } from '../../services/catalogo_services';
+import { limpiarSesion, obtenerSesion } from '../../services/authSession';
 import { ToastAlerta, MENSAJE_AGREGADO_CARRITO, type TipoAlerta } from './AlertaAñadidoP';
 
 /**
- * Componente `CategoriaPage`:
- * Renderiza dinámicamente los productos filtrados por categoría según el parámetro
- * de ruta (`educativos` o `creativos`), permite navegar al detalle de cada producto
- * y agregar ítems al carrito con notificaciones visuales en pantalla.
+ * Resuelve el ID numérico del usuario autenticado desde `localStorage`
+ * o desde el payload del JWT; cae en `1` solo si no hay sesión válida.
+ */
+const obtenerUsuarioIdActual = (): number => {
+  try {
+    const idDirecto = Number(localStorage.getItem('usuarioId'));
+    if (!Number.isNaN(idDirecto) && idDirecto > 0) {
+      return idDirecto;
+    }
+
+    const raw =
+      localStorage.getItem('usuario') ||
+      localStorage.getItem('user') ||
+      localStorage.getItem('authUser') ||
+      localStorage.getItem('sesionUsuario');
+
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const id = Number(parsed?.id ?? parsed?.usuario?.id ?? parsed?.user?.id);
+      if (!Number.isNaN(id) && id > 0) {
+        return id;
+      }
+    }
+
+    const token = localStorage.getItem('token');
+    if (token && token.split('.').length === 3) {
+      const payloadBase64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payloadJson = JSON.parse(atob(payloadBase64));
+      const tokenId = Number(payloadJson?.id ?? payloadJson?.usuarioId ?? payloadJson?.sub);
+      if (!Number.isNaN(tokenId) && tokenId > 0) {
+        return tokenId;
+      }
+    }
+  } catch (error) {
+    console.error('Error al resolver usuarioId desde sesión:', error);
+  }
+
+  return 1;
+};
+
+const CATEGORIAS_BASE: Record<string, { titulo: string; items: any[] }> = {
+  educativos: {
+    titulo: 'Juguetes Educativos',
+    items: [
+      {
+        id: 101,
+        nombre: 'Robot de Madera',
+        precio: 15990,
+        descripcion: 'Robot de madera diseñado para estimular la creatividad.',
+        imagen: '/Img/Robot madera 1.jpe',
+      },
+      {
+        id: 104,
+        nombre: 'Kit de Dinosaurios para Armar',
+        precio: 18990,
+        descripcion: 'Figuras de madera 3D en 1 kit educativo.',
+        imagen: '/Img/Dino.png',
+      },
+      {
+        id: 105,
+        nombre: 'Tren de Madera Magnético',
+        precio: 21990,
+        descripcion: 'Juego de vagones con conexión magnética segura.',
+        imagen: '/Img/Tren.png',
+      },
+      {
+        id: 106,
+        nombre: 'Mini Laboratorio de Ciencias',
+        precio: 24990,
+        descripcion: 'Experimentos divertidos y seguros para niños.',
+        imagen: '/Img/Laboratorio.png',
+      },
+    ],
+  },
+  creativos: {
+    titulo: 'Juguetes Creativos',
+    items: [
+      {
+        id: 103,
+        nombre: 'Pinta tu Juguete',
+        precio: 12990,
+        descripcion: 'Kit de manualidades didáctico y creativo.',
+        imagen: '/Img/Pinta_Juguete.jpe',
+      },
+      {
+        id: 102,
+        nombre: 'Colección Creativa',
+        precio: 19990,
+        descripcion: 'Set creativo con materiales para pintar y decorar.',
+        imagen: '/Img/Coleccion Creativa.jpe',
+      },
+    ],
+  },
+};
+
+/**
+ * Vista de productos por categoría (`/categoria/:tipo`).
+ * Sincroniza datos con `catalogoService`, comparte `pixelToysFavoritos`
+ * en `localStorage`, usa el `usuarioId` real de sesión para el carrito y exige
+ * sesión activa al navegar a `/producto/:id`.
  */
 export const CategoriaPage: React.FC = () => {
   const { tipo } = useParams<{ tipo: string }>();
   const navigate = useNavigate();
 
-  // Estados locales de UI y carrito
-  const [favoritos, setFavoritos] = useState<number[]>([]);
+  const claveCategoria = tipo && CATEGORIAS_BASE[tipo] ? tipo : 'educativos';
+  const baseCategoria = CATEGORIAS_BASE[claveCategoria];
+
+  const [itemsCategoria, setItemsCategoria] = useState<any[]>(baseCategoria.items);
   const [cantidadCarrito, setCantidadCarrito] = useState<number>(0);
   const [menuCategoriasAbierto, setMenuCategoriasAbierto] = useState<boolean>(false);
   const [menuAbierto, setMenuAbierto] = useState<boolean>(false);
   const [alerta, setAlerta] = useState<{ mensaje: string; tipo: TipoAlerta } | null>(null);
 
+  // Favoritos persistidos en la clave compartida `pixelToysFavoritos`
+  const [favoritos, setFavoritos] = useState<any[]>(() => {
+    try {
+      const guardados = localStorage.getItem('pixelToysFavoritos');
+      const parsed = guardados ? JSON.parse(guardados) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+
   const cerrarAlerta = useCallback(() => {
     setAlerta(null);
   }, []);
 
-  // Datos de sesión desde localStorage
   const emailUsuario = localStorage.getItem('usuarioEmail') || '';
   const nombreUsuario =
-    localStorage.getItem('usuarioNombre') || (emailUsuario ? emailUsuario.split('@')[0] : 'Usuario');
+    localStorage.getItem('usuarioNombre') ||
+    (emailUsuario ? emailUsuario.split('@')[0] : 'Usuario');
   const esAdmin =
     emailUsuario.toLowerCase() === 'carlos@gmail.com' ||
     emailUsuario.toLowerCase() === 'lopez@gmail.com' ||
     localStorage.getItem('usuarioRol') === 'ADMIN';
 
-  const usuarioId = 1; // ID de usuario sincronizado con el flujo actual
+  const usuarioId = obtenerUsuarioIdActual();
 
   /**
-   * Consulta el carrito del usuario y actualiza el contador mostrado en el navbar.
+   * Consulta el carrito del usuario activo y actualiza el contador del navbar.
    */
-  const actualizarContadorCarrito = async () => {
+  const actualizarContadorCarrito = useCallback(async () => {
     try {
       const carrito = await carritoService.obtenerCarritoPorUsuario(usuarioId);
-      const cantidad = carrito.items.reduce((total, item) => total + item.cantidad, 0);
+      const itemsSeguros = Array.isArray(carrito?.items) ? carrito.items : [];
+      const cantidad = itemsSeguros.reduce((total, item) => total + item.cantidad, 0);
       setCantidadCarrito(cantidad);
     } catch (error) {
       console.error('Error al actualizar el contador del carrito:', error);
     }
-  };
+  }, [usuarioId]);
 
   useEffect(() => {
     actualizarContadorCarrito();
-  }, []);
-
-  // Catálogo local agrupado por categoría con IDs sincronizados con el backend
-  const productosPorCategoria: Record<string, { titulo: string; items: any[] }> = {
-    educativos: {
-      titulo: 'Juguetes Educativos',
-      items: [
-        {
-          id: 101,
-          nombre: 'Robot de Madera',
-          precio: 15990,
-          descripcion: 'Robot de madera diseñado para estimular la creatividad.',
-          imagen: '/Img/Robot madera 1.jpe',
-        },
-        {
-          id: 104,
-          nombre: 'Kit de Dinosaurios para Armar',
-          precio: 18990,
-          descripcion: 'Figuras de madera 3D en 1 kit educativo.',
-          imagen: '/Img/Dino.png',
-        },
-        {
-          id: 105,
-          nombre: 'Tren de Madera Magnético',
-          precio: 21990,
-          descripcion: 'Juego de vagones con conexión magnética segura.',
-          imagen: '/Img/Tren.png',
-        },
-        {
-          id: 106,
-          nombre: 'Mini Laboratorio de Ciencias',
-          precio: 24990,
-          descripcion: 'Experimentos divertidos y seguros para niños.',
-          imagen: '/Img/Laboratorio.png',
-        },
-      ],
-    },
-    creativos: {
-      titulo: 'Juguetes Creativos',
-      items: [
-        {
-          id: 103,
-          nombre: 'Pinta tu Juguete',
-          precio: 12990,
-          descripcion: 'Kit de manualidades didáctico y creativo.',
-          imagen: '/Img/Pinta_Juguete.jpe',
-        },
-        {
-          id: 102,
-          nombre: 'Colección Creativa',
-          precio: 19990,
-          descripcion: 'Set creativo con materiales para pintar y decorar.',
-          imagen: '/Img/Coleccion Creativa.jpe',
-        },
-      ],
-    },
-  };
-
-  const categoriaActual =
-    productosPorCategoria[tipo || 'educativos'] || productosPorCategoria.educativos;
+  }, [actualizarContadorCarrito]);
 
   /**
-   * Navega hacia la vista de detalle del producto seleccionado, enviando
-   * sus datos y su imagen local por state.
-   *
-   * @param prod Producto seleccionado en la categoría
+   * Sincroniza los productos de la categoría con el microservicio de catálogo
+   * o mantiene los ítems base de respaldo si el backend no responde.
+   */
+  useEffect(() => {
+    let activo = true;
+    const configBase = CATEGORIAS_BASE[claveCategoria];
+    setItemsCategoria(configBase.items);
+
+    catalogoService
+      .obtenerProductos()
+      .then((lista: ProductoDTO[]) => {
+        if (!activo || !Array.isArray(lista) || lista.length === 0) return;
+
+        const sincronizados = configBase.items.map((itemBase) => {
+          const remoto = lista.find((p) => Number(p.id) === Number(itemBase.id));
+          if (!remoto) return itemBase;
+
+          return {
+            ...itemBase,
+            nombre: remoto.nombre || itemBase.nombre,
+            descripcion: remoto.descripcion || itemBase.descripcion,
+            precio: typeof remoto.precio === 'number' ? remoto.precio : itemBase.precio,
+          };
+        });
+
+        setItemsCategoria(sincronizados);
+      })
+      .catch(() => {
+        // Mantiene los ítems base si no hay respuesta del catálogo
+      });
+
+    return () => {
+      activo = false;
+    };
+  }, [claveCategoria]);
+
+  /**
+   * Alterna un producto en `pixelToysFavoritos` y persiste en `localStorage`.
+   */
+  const toggleFavorito = (prod: any) => {
+    setFavoritos((prev) => {
+      const existe = prev.some((item) => Number(item.id) === Number(prod.id));
+      const nuevaLista = existe
+        ? prev.filter((item) => Number(item.id) !== Number(prod.id))
+        : [
+            ...prev,
+            {
+              id: prod.id,
+              nombre: prod.nombre,
+              precio: prod.precio,
+              imagen: prod.imagen,
+              descripcion: prod.descripcion,
+            },
+          ];
+
+      localStorage.setItem('pixelToysFavoritos', JSON.stringify(nuevaLista));
+      return nuevaLista;
+    });
+  };
+
+  /**
+   * Navega hacia `/producto/:id` si existe una sesión válida; de lo contrario va a `/login`.
    */
   const irAlDetalle = (prod: any) => {
     if (!prod?.id) return;
+
+    const sesion = obtenerSesion();
+    if (!sesion) {
+      limpiarSesion();
+      navigate('/login', { replace: true });
+      return;
+    }
+
     navigate(`/producto/${prod.id}`, {
       state: {
         producto: prod,
@@ -128,10 +247,7 @@ export const CategoriaPage: React.FC = () => {
   };
 
   /**
-   * Agrega un producto al microservicio de carrito, refresca el contador y muestra
-   * la alerta visual estandarizada.
-   *
-   * @param prod Producto seleccionado en la categoría
+   * Agrega el producto al carrito del usuario actual y refresca el contador.
    */
   const agregarAlCarrito = async (prod: any) => {
     try {
@@ -141,7 +257,6 @@ export const CategoriaPage: React.FC = () => {
         precioUnitario: prod.precio,
       };
 
-      console.log('Enviando al carrito desde Categorías:', itemRequest);
       await carritoService.agregarItem(usuarioId, itemRequest);
       await actualizarContadorCarrito();
 
@@ -150,17 +265,6 @@ export const CategoriaPage: React.FC = () => {
       console.error('Error al conectar con el servicio de carrito:', error);
       setAlerta({ mensaje: 'Error de conexión con el carrito.', tipo: 'error' });
     }
-  };
-
-  /**
-   * Alterna el estado de favorito local para el ID de producto indicado.
-   *
-   * @param id Identificador del producto
-   */
-  const toggleFavorito = (id: number) => {
-    setFavoritos((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
   };
 
   return (
@@ -173,14 +277,12 @@ export const CategoriaPage: React.FC = () => {
         paddingBottom: '60px',
       }}
     >
-      {/* Notificación visual flotante */}
       <ToastAlerta
         mensaje={alerta?.mensaje || null}
         tipo={alerta?.tipo || 'exito'}
         onClose={cerrarAlerta}
       />
 
-      {/* --- NAVBAR SUPERIOR UNIFICADO --- */}
       <header
         style={{
           backgroundColor: '#ffffff',
@@ -225,7 +327,6 @@ export const CategoriaPage: React.FC = () => {
             alignItems: 'center',
           }}
         >
-          {/* Desplegable de Categorías */}
           <div style={{ position: 'relative' }}>
             <span
               onClick={() => setMenuCategoriasAbierto(!menuCategoriasAbierto)}
@@ -327,7 +428,6 @@ export const CategoriaPage: React.FC = () => {
             ❤️
           </span>
 
-          {/* Menú de Usuario */}
           <div style={{ position: 'relative' }}>
             <div
               onClick={() => setMenuAbierto(!menuAbierto)}
@@ -402,7 +502,11 @@ export const CategoriaPage: React.FC = () => {
                 )}
                 <div
                   onClick={() => {
-                    localStorage.clear();
+                    limpiarSesion();
+                    localStorage.removeItem('usuarioEmail');
+                    localStorage.removeItem('usuarioNombre');
+                    localStorage.removeItem('usuarioRol');
+                    localStorage.removeItem('usuarioId');
                     navigate('/login');
                   }}
                   style={{
@@ -419,7 +523,6 @@ export const CategoriaPage: React.FC = () => {
             )}
           </div>
 
-          {/* Botón Carrito con contador sincronizado */}
           <button
             type="button"
             onClick={() => navigate('/carrito')}
@@ -451,14 +554,12 @@ export const CategoriaPage: React.FC = () => {
         </div>
       </header>
 
-      {/* --- TÍTULO DE LA CATEGORÍA --- */}
       <div style={{ textAlign: 'center', padding: '40px 20px 30px 20px' }}>
         <h1 style={{ fontSize: '2rem', fontWeight: '800', color: '#1e293b', margin: 0 }}>
-          {categoriaActual.titulo}
+          {baseCategoria.titulo}
         </h1>
       </div>
 
-      {/* --- GRILLA DE PRODUCTOS --- */}
       <div
         style={{
           maxWidth: '1200px',
@@ -469,8 +570,8 @@ export const CategoriaPage: React.FC = () => {
           padding: '0 24px',
         }}
       >
-        {categoriaActual.items.map((prod) => {
-          const esFavorito = favoritos.includes(prod.id);
+        {itemsCategoria.map((prod) => {
+          const esFavorito = favoritos.some((fav) => Number(fav.id) === Number(prod.id));
 
           return (
             <div
@@ -487,7 +588,6 @@ export const CategoriaPage: React.FC = () => {
               }}
             >
               <div>
-                {/* Contenedor de imagen clickeable para abrir el detalle del producto */}
                 <div
                   onClick={() => irAlDetalle(prod)}
                   style={{
@@ -508,12 +608,11 @@ export const CategoriaPage: React.FC = () => {
                     alt={prod.nombre}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
-                  {/* Botón de favoritos (detiene propagación para no navegar al detalle) */}
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      toggleFavorito(prod.id);
+                      toggleFavorito(prod);
                     }}
                     style={{
                       position: 'absolute',
@@ -525,12 +624,12 @@ export const CategoriaPage: React.FC = () => {
                       borderRadius: '50%',
                       cursor: 'pointer',
                     }}
+                    title={esFavorito ? 'Quitar de favoritos' : 'Agregar a favoritos'}
                   >
                     {esFavorito ? '❤️' : '🤍'}
                   </button>
                 </div>
 
-                {/* Título clickeable para ir al detalle */}
                 <h3
                   onClick={() => irAlDetalle(prod)}
                   style={{
@@ -568,7 +667,6 @@ export const CategoriaPage: React.FC = () => {
                 <span style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a' }}>
                   ${prod.precio?.toLocaleString('es-CL')}
                 </span>
-                {/* Botón agregar al carrito (detiene propagación para no navegar al detalle) */}
                 <button
                   type="button"
                   onClick={(e) => {

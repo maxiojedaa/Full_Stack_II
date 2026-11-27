@@ -2,14 +2,21 @@ import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { carritoService } from '../../services/carrito_services';
 import { catalogoService, type ProductoDTO } from '../../services/catalogo_services';
+import { obtenerSesion } from '../../services/authSession';
 import { ToastAlerta, MENSAJE_AGREGADO_CARRITO, type TipoAlerta } from './AlertaAñadidoP';
 
+/**
+ * Datos que pueden llegar por state de navegación desde el catálogo u otra vista.
+ */
 interface LocationStateDetalle {
   producto?: ProductoDTO;
   imagen?: string;
 }
 
-// Datos base de respaldo por ID para garantizar nombre, precio, breve descripción e imagen
+/**
+ * Catálogo base de respaldo por ID para garantizar información visible
+ * aun cuando el backend no responda o el producto venga sin detalle completo.
+ */
 const PRODUCTOS_BASE: Record<
   string,
   { nombre: string; precio: number; descripcion: string; imagen: string }
@@ -54,8 +61,8 @@ const PRODUCTOS_BASE: Record<
 
 /**
  * Página de detalle de producto.
- * Mantiene la barra superior de PIXEL&TOYS, muestra el producto en un tamaño amplio
- * con su breve descripción y permite agregarlo al carrito.
+ * Mantiene la barra superior de PIXEL&TOYS, muestra el producto en formato amplio
+ * con su descripción y precio, y permite agregarlo al carrito.
  */
 export const ProductoDetallePage = () => {
   const { id } = useParams<{ id: string }>();
@@ -66,7 +73,7 @@ export const ProductoDetallePage = () => {
   const claveId = String(id || '').trim();
   const base = PRODUCTOS_BASE[claveId];
 
-  // Datos del producto a mostrar
+  // Datos principales del producto
   const [nombre, setNombre] = useState<string>(
     state?.producto?.nombre || base?.nombre || 'Producto'
   );
@@ -82,7 +89,7 @@ export const ProductoDetallePage = () => {
     state?.imagen || base?.imagen || '/Img/LogoPixelToysIII.png'
   );
 
-  // Estados de la barra superior, carrito y notificación visual
+  // Estados de menús, búsqueda, carrito y notificaciones
   const [menuCategoriasAbierto, setMenuCategoriasAbierto] = useState(false);
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [busqueda, setBusqueda] = useState('');
@@ -90,22 +97,28 @@ export const ProductoDetallePage = () => {
   const [agregando, setAgregando] = useState(false);
   const [alerta, setAlerta] = useState<{ mensaje: string; tipo: TipoAlerta } | null>(null);
 
-  const emailUsuario = localStorage.getItem('usuarioEmail') || '';
+  // Datos de sesión del usuario activo
+  const sesion = obtenerSesion();
+  const emailUsuario = sesion?.usuario.email || localStorage.getItem('usuarioEmail') || '';
   const nombreUsuario =
-    localStorage.getItem('usuarioNombre') || (emailUsuario ? emailUsuario.split('@')[0] : 'Usuario');
+    sesion?.usuario.nombre ||
+    localStorage.getItem('usuarioNombre') ||
+    (emailUsuario ? emailUsuario.split('@')[0] : 'Usuario');
+  const rolUsuario = sesion?.usuario.rol || localStorage.getItem('usuarioRol') || '';
   const esAdmin =
     emailUsuario.toLowerCase() === 'carlos@gmail.com' ||
     emailUsuario.toLowerCase() === 'lopez@gmail.com' ||
-    localStorage.getItem('usuarioRol') === 'ADMIN';
+    rolUsuario.toUpperCase() === 'ADMIN';
 
-  const usuarioId = 1;
+  // Usa el ID del usuario en sesión si existe; de lo contrario cae en 1 como respaldo
+  const usuarioId = sesion?.usuario.id || Number(localStorage.getItem('usuarioId')) || 1;
 
   const cerrarAlerta = useCallback(() => {
     setAlerta(null);
   }, []);
 
   /**
-   * Consulta el carrito del usuario y actualiza el contador en la barra superior.
+   * Consulta el carrito del usuario y actualiza el contador mostrado en el navbar.
    */
   const actualizarContadorCarrito = useCallback(async () => {
     try {
@@ -123,8 +136,8 @@ export const ProductoDetallePage = () => {
   }, [actualizarContadorCarrito]);
 
   /**
-   * Intenta sincronizar nombre, precio o descripción desde el servicio de catálogo
-   * sin bloquear ni mostrar error en pantalla si el backend no responde.
+   * Sincroniza los datos del producto desde el microservicio de catálogo
+   * manteniendo los datos base si el backend no responde o no tiene el ítem.
    */
   useEffect(() => {
     let activo = true;
@@ -138,19 +151,26 @@ export const ProductoDetallePage = () => {
           if (encontrado.nombre) setNombre(encontrado.nombre);
           if (typeof encontrado.precio === 'number') setPrecio(encontrado.precio);
           if (encontrado.descripcion) setDescripcion(encontrado.descripcion);
+          if (encontrado.imagen && !state?.imagen) {
+            setImagen(
+              encontrado.imagen.startsWith('/') || encontrado.imagen.startsWith('http')
+                ? encontrado.imagen
+                : `/Img/${encontrado.imagen}`
+            );
+          }
         }
       })
       .catch(() => {
-        // Mantiene los datos locales si el catálogo remoto no está disponible
+        // Conserva los valores iniciales/base si el servicio no está disponible
       });
 
     return () => {
       activo = false;
     };
-  }, [claveId]);
+  }, [claveId, state?.imagen]);
 
   /**
-   * Agrega el producto actual al carrito y actualiza el contador de la barra superior.
+   * Agrega una unidad del producto actual al carrito y refresca el contador.
    */
   const handleAgregarAlCarrito = async () => {
     const productoIdNumerico = Number(state?.producto?.id ?? claveId) || 101;
@@ -506,7 +526,7 @@ export const ProductoDetallePage = () => {
             alignItems: 'center',
           }}
         >
-          {/* Imagen grande del producto */}
+          {/* Imagen amplia del producto */}
           <div
             style={{
               borderRadius: '16px',
@@ -519,11 +539,14 @@ export const ProductoDetallePage = () => {
             <img
               src={imagen}
               alt={nombre}
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = '/Img/LogoPixelToysIII.png';
+              }}
               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             />
           </div>
 
-          {/* Apartado con breve descripción, precio y botón Agregar al Carrito */}
+          {/* Información del producto y botón Agregar al Carrito */}
           <div>
             <span
               style={{

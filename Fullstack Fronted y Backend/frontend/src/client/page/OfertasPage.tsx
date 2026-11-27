@@ -1,100 +1,222 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { carritoService } from '../../services/carrito_services';
+import { catalogoService, type ProductoDTO } from '../../services/catalogo_services';
+import { limpiarSesion, obtenerSesion } from '../../services/authSession';
 import { ToastAlerta, MENSAJE_AGREGADO_CARRITO, type TipoAlerta } from './AlertaAñadidoP';
 
 /**
- * Componente `OfertasPage`:
- * Muestra la sección de ofertas especiales con descuento visual (precio de venta
- * destacado junto al precio original tachado), permite navegar al detalle de cada
- * producto y agregar productos al carrito mostrando notificaciones visuales en pantalla
- * con `ToastAlerta`.
+ * Resuelve el ID numérico del usuario autenticado desde `localStorage`
+ * o desde el payload del JWT; cae en `1` solo si no hay sesión válida.
+ */
+const obtenerUsuarioIdActual = (): number => {
+  try {
+    const idDirecto = Number(localStorage.getItem('usuarioId'));
+    if (!Number.isNaN(idDirecto) && idDirecto > 0) {
+      return idDirecto;
+    }
+
+    const raw =
+      localStorage.getItem('usuario') ||
+      localStorage.getItem('user') ||
+      localStorage.getItem('authUser') ||
+      localStorage.getItem('sesionUsuario');
+
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const id = Number(parsed?.id ?? parsed?.usuario?.id ?? parsed?.user?.id);
+      if (!Number.isNaN(id) && id > 0) {
+        return id;
+      }
+    }
+
+    const token = localStorage.getItem('token');
+    if (token && token.split('.').length === 3) {
+      const payloadBase64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payloadJson = JSON.parse(atob(payloadBase64));
+      const tokenId = Number(payloadJson?.id ?? payloadJson?.usuarioId ?? payloadJson?.sub);
+      if (!Number.isNaN(tokenId) && tokenId > 0) {
+        return tokenId;
+      }
+    }
+  } catch (error) {
+    console.error('Error al resolver usuarioId desde sesión:', error);
+  }
+
+  return 1;
+};
+
+interface ProductoOfertaItem {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  precio: number;
+  precioOriginal: number;
+  descuento: string;
+  imagen: string;
+}
+
+const OFERTAS_BASE: ProductoOfertaItem[] = [
+  {
+    id: 102,
+    nombre: 'Colección Creativa',
+    descripcion: 'Set creativo con materiales para pintar y decorar.',
+    precio: 19990,
+    precioOriginal: 24990,
+    descuento: '20% OFF',
+    imagen: '/Img/Coleccion Creativa.jpe',
+  },
+  {
+    id: 104,
+    nombre: 'Kit de Dinosaurios para Armar',
+    descripcion: 'Figuras de madera 3D en 1 kit educativo.',
+    precio: 18990,
+    precioOriginal: 23990,
+    descuento: '20% OFF',
+    imagen: '/Img/Dino.png',
+  },
+  {
+    id: 105,
+    nombre: 'Tren de Madera Magnético',
+    descripcion: 'Juego de vagones con conexión magnética segura.',
+    precio: 21990,
+    precioOriginal: 27990,
+    descuento: '20% OFF',
+    imagen: '/Img/Tren.png',
+  },
+];
+
+/**
+ * Vista de ofertas especiales (`/ofertas`).
+ * Sincroniza los productos con `catalogoService`, comparte `pixelToysFavoritos`
+ * en `localStorage`, usa el `usuarioId` real de sesión para el carrito y valida
+ * la sesión antes de navegar a `/producto/:id`.
  */
 export const OfertasPage: React.FC = () => {
   const navigate = useNavigate();
 
-  // Estados locales de navegación, carrito, favoritos y alertas
+  const [productosEnOferta, setProductosEnOferta] = useState<ProductoOfertaItem[]>(OFERTAS_BASE);
   const [cantidadCarrito, setCantidadCarrito] = useState<number>(0);
   const [menuCategoriasAbierto, setMenuCategoriasAbierto] = useState<boolean>(false);
   const [menuAbierto, setMenuAbierto] = useState<boolean>(false);
-  const [favoritos, setFavoritos] = useState<number[]>([]);
   const [alerta, setAlerta] = useState<{ mensaje: string; tipo: TipoAlerta } | null>(null);
+
+  // Favoritos persistidos en la clave compartida `pixelToysFavoritos`
+  const [favoritos, setFavoritos] = useState<any[]>(() => {
+    try {
+      const guardados = localStorage.getItem('pixelToysFavoritos');
+      const parsed = guardados ? JSON.parse(guardados) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
 
   const cerrarAlerta = useCallback(() => {
     setAlerta(null);
   }, []);
 
-  // Datos de sesión del usuario actual desde localStorage
   const emailUsuario = localStorage.getItem('usuarioEmail') || '';
   const nombreUsuario =
-    localStorage.getItem('usuarioNombre') || (emailUsuario ? emailUsuario.split('@')[0] : 'Usuario');
+    localStorage.getItem('usuarioNombre') ||
+    (emailUsuario ? emailUsuario.split('@')[0] : 'Usuario');
   const esAdmin =
     emailUsuario.toLowerCase() === 'carlos@gmail.com' ||
     emailUsuario.toLowerCase() === 'lopez@gmail.com' ||
     localStorage.getItem('usuarioRol') === 'ADMIN';
 
-  const usuarioId = 1; // ID de usuario sincronizado con el flujo actual
+  const usuarioId = obtenerUsuarioIdActual();
 
   /**
-   * Consulta el carrito del usuario y actualiza el contador mostrado en la barra superior.
+   * Consulta el carrito del usuario activo y actualiza el contador del navbar.
    */
-  const actualizarContadorCarrito = async () => {
+  const actualizarContadorCarrito = useCallback(async () => {
     try {
       const carrito = await carritoService.obtenerCarritoPorUsuario(usuarioId);
-      const cantidad = carrito.items.reduce((total, item) => total + item.cantidad, 0);
+      const itemsSeguros = Array.isArray(carrito?.items) ? carrito.items : [];
+      const cantidad = itemsSeguros.reduce((total, item) => total + item.cantidad, 0);
       setCantidadCarrito(cantidad);
     } catch (error) {
       console.error('Error al actualizar el contador del carrito:', error);
     }
-  };
+  }, [usuarioId]);
 
   useEffect(() => {
     actualizarContadorCarrito();
+  }, [actualizarContadorCarrito]);
+
+  /**
+   * Sincroniza nombre, descripción o precio de las ofertas con el servicio de catálogo
+   * conservando los datos base y descuentos si el backend no responde.
+   */
+  useEffect(() => {
+    let activo = true;
+
+    catalogoService
+      .obtenerProductos()
+      .then((lista: ProductoDTO[]) => {
+        if (!activo || !Array.isArray(lista) || lista.length === 0) return;
+
+        setProductosEnOferta((prev) =>
+          prev.map((oferta) => {
+            const remoto = lista.find((p) => Number(p.id) === Number(oferta.id));
+            if (!remoto) return oferta;
+
+            return {
+              ...oferta,
+              nombre: remoto.nombre || oferta.nombre,
+              descripcion: remoto.descripcion || oferta.descripcion,
+              precio: typeof remoto.precio === 'number' ? remoto.precio : oferta.precio,
+            };
+          })
+        );
+      })
+      .catch(() => {
+        // Conserva las ofertas base si el servicio de catálogo no responde
+      });
+
+    return () => {
+      activo = false;
+    };
   }, []);
 
   /**
-   * Lista de productos en oferta:
-   * - `precio`: precio real de venta enviado al microservicio de carrito.
-   * - `precioOriginal`: valor referencial tachado para mostrar el descuento.
+   * Alterna un producto en `pixelToysFavoritos` y persiste en `localStorage`.
    */
-  const productosEnOferta = [
-    {
-      id: 102,
-      nombre: 'Colección Creativa',
-      descripcion: 'Set creativo con materiales para pintar y decorar.',
-      precio: 19990,
-      precioOriginal: 24990,
-      descuento: '20% OFF',
-      imagen: '/Img/Coleccion Creativa.jpe',
-    },
-    {
-      id: 104,
-      nombre: 'Kit de Dinosaurios para Armar',
-      descripcion: 'Figuras de madera 3D en 1 kit educativo.',
-      precio: 18990,
-      precioOriginal: 23990,
-      descuento: '20% OFF',
-      imagen: '/Img/Dino.png',
-    },
-    {
-      id: 105,
-      nombre: 'Tren de Madera Magnético',
-      descripcion: 'Juego de vagones con conexión magnética segura.',
-      precio: 21990,
-      precioOriginal: 27990,
-      descuento: '20% OFF',
-      imagen: '/Img/Tren.png',
-    },
-  ];
+  const toggleFavorito = (prod: ProductoOfertaItem) => {
+    setFavoritos((prev) => {
+      const existe = prev.some((item) => Number(item.id) === Number(prod.id));
+      const nuevaLista = existe
+        ? prev.filter((item) => Number(item.id) !== Number(prod.id))
+        : [
+            ...prev,
+            {
+              id: prod.id,
+              nombre: prod.nombre,
+              precio: prod.precio,
+              imagen: prod.imagen,
+              descripcion: prod.descripcion,
+            },
+          ];
+
+      localStorage.setItem('pixelToysFavoritos', JSON.stringify(nuevaLista));
+      return nuevaLista;
+    });
+  };
 
   /**
-   * Navega hacia la vista de detalle del producto en oferta seleccionado,
-   * enviando el producto (con su precio de oferta) y su imagen por state.
-   *
-   * @param prod Producto en oferta seleccionado
+   * Navega al detalle del producto verificando que exista una sesión activa.
    */
-  const irAlDetalle = (prod: (typeof productosEnOferta)[number]) => {
+  const irAlDetalle = (prod: ProductoOfertaItem) => {
     if (!prod?.id) return;
+
+    const sesion = obtenerSesion();
+    if (!sesion) {
+      limpiarSesion();
+      navigate('/login', { replace: true });
+      return;
+    }
+
     navigate(`/producto/${prod.id}`, {
       state: {
         producto: prod,
@@ -104,20 +226,15 @@ export const OfertasPage: React.FC = () => {
   };
 
   /**
-   * Envía el producto en oferta al microservicio de carrito con su precio real,
-   * actualiza el contador y muestra el mensaje estandarizado con `ToastAlerta`.
-   *
-   * @param prod Producto en oferta seleccionado
+   * Agrega el producto en oferta al carrito del usuario actual y refresca el contador.
    */
-  const agregarAlCarrito = async (prod: any) => {
+  const agregarAlCarrito = async (prod: ProductoOfertaItem) => {
     try {
       const itemRequest = {
         productoId: prod.id,
         cantidad: 1,
         precioUnitario: prod.precio,
       };
-
-      console.log('Enviando oferta al carrito:', itemRequest);
 
       await carritoService.agregarItem(usuarioId, itemRequest);
       await actualizarContadorCarrito();
@@ -127,17 +244,6 @@ export const OfertasPage: React.FC = () => {
       console.error('Error al conectar con el servicio de carrito:', error);
       setAlerta({ mensaje: 'Error de conexión con el carrito.', tipo: 'error' });
     }
-  };
-
-  /**
-   * Alterna un producto en la lista local de favoritos.
-   *
-   * @param id Identificador del producto
-   */
-  const toggleFavorito = (id: number) => {
-    setFavoritos((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
   };
 
   return (
@@ -150,14 +256,12 @@ export const OfertasPage: React.FC = () => {
         paddingBottom: '60px',
       }}
     >
-      {/* Notificación visual flotante */}
       <ToastAlerta
         mensaje={alerta?.mensaje || null}
         tipo={alerta?.tipo || 'exito'}
         onClose={cerrarAlerta}
       />
 
-      {/* --- NAVBAR SUPERIOR UNIFICADO --- */}
       <header
         style={{
           backgroundColor: '#ffffff',
@@ -202,7 +306,6 @@ export const OfertasPage: React.FC = () => {
             alignItems: 'center',
           }}
         >
-          {/* Menú Desplegable de Categorías */}
           <div style={{ position: 'relative' }}>
             <span
               onClick={() => setMenuCategoriasAbierto(!menuCategoriasAbierto)}
@@ -304,7 +407,6 @@ export const OfertasPage: React.FC = () => {
             ❤️
           </span>
 
-          {/* Menú de Usuario */}
           <div style={{ position: 'relative' }}>
             <div
               onClick={() => setMenuAbierto(!menuAbierto)}
@@ -378,7 +480,11 @@ export const OfertasPage: React.FC = () => {
                 )}
                 <div
                   onClick={() => {
-                    localStorage.clear();
+                    limpiarSesion();
+                    localStorage.removeItem('usuarioEmail');
+                    localStorage.removeItem('usuarioNombre');
+                    localStorage.removeItem('usuarioRol');
+                    localStorage.removeItem('usuarioId');
                     navigate('/login');
                   }}
                   style={{
@@ -395,7 +501,6 @@ export const OfertasPage: React.FC = () => {
             )}
           </div>
 
-          {/* Botón Carrito */}
           <button
             type="button"
             onClick={() => navigate('/carrito')}
@@ -427,7 +532,6 @@ export const OfertasPage: React.FC = () => {
         </div>
       </header>
 
-      {/* --- CABECERA DE OFERTAS ESPECIALES --- */}
       <div style={{ textAlign: 'center', padding: '40px 20px 20px 20px' }}>
         <h1
           style={{
@@ -448,7 +552,6 @@ export const OfertasPage: React.FC = () => {
         </p>
       </div>
 
-      {/* --- GRILLA DE PRODUCTOS EN OFERTA --- */}
       <div
         style={{
           maxWidth: '1200px',
@@ -460,7 +563,7 @@ export const OfertasPage: React.FC = () => {
         }}
       >
         {productosEnOferta.map((prod) => {
-          const esFavorito = favoritos.includes(prod.id);
+          const esFavorito = favoritos.some((fav) => Number(fav.id) === Number(prod.id));
 
           return (
             <div
@@ -477,7 +580,6 @@ export const OfertasPage: React.FC = () => {
               }}
             >
               <div>
-                {/* Contenedor de la imagen clickeable para abrir el detalle del producto */}
                 <div
                   onClick={() => irAlDetalle(prod)}
                   style={{
@@ -517,12 +619,11 @@ export const OfertasPage: React.FC = () => {
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
 
-                  {/* Botón de favoritos (detiene propagación para no navegar al detalle) */}
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      toggleFavorito(prod.id);
+                      toggleFavorito(prod);
                     }}
                     style={{
                       position: 'absolute',
@@ -534,12 +635,12 @@ export const OfertasPage: React.FC = () => {
                       borderRadius: '50%',
                       cursor: 'pointer',
                     }}
+                    title={esFavorito ? 'Quitar de favoritos' : 'Agregar a favoritos'}
                   >
                     {esFavorito ? '❤️' : '🤍'}
                   </button>
                 </div>
 
-                {/* Título clickeable para ir al detalle */}
                 <h3
                   onClick={() => irAlDetalle(prod)}
                   style={{
@@ -552,12 +653,18 @@ export const OfertasPage: React.FC = () => {
                 >
                   {prod.nombre}
                 </h3>
-                <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '16px', minHeight: '40px' }}>
+                <p
+                  style={{
+                    color: '#64748b',
+                    fontSize: '0.875rem',
+                    marginBottom: '16px',
+                    minHeight: '40px',
+                  }}
+                >
                   {prod.descripcion}
                 </p>
               </div>
 
-              {/* Precios y Botón de compra */}
               <div
                 style={{
                   display: 'flex',
@@ -584,7 +691,6 @@ export const OfertasPage: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Botón agregar al carrito (detiene propagación para no navegar al detalle) */}
                 <button
                   type="button"
                   onClick={(e) => {

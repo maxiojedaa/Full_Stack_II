@@ -87,7 +87,7 @@ export const AdminPage: React.FC = () => {
   const navigate = useNavigate();
 
   // Endpoints de microservicios
-  const API_CATALOGO = 'http://localhost:8083/api/catalogo';
+  const API_CATALOGO = 'http://localhost:8088/api/catalogo';
   const API_USUARIOS = 'http://localhost:8081/api/usuarios';
 
   // Estados de datos y carga
@@ -402,6 +402,12 @@ export const AdminPage: React.FC = () => {
     e.preventDefault();
     if (!nombre || !precio) return;
 
+    const token = localStorage.getItem('token');
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+
     const payload = {
       nombre,
       descripcion: descripcion || 'Juguete didáctico y creativo',
@@ -413,7 +419,7 @@ export const AdminPage: React.FC = () => {
       if (editandoId !== null) {
         const resp = await fetch(`${API_CATALOGO}/${editandoId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(payload),
         });
         if (!resp.ok) throw new Error('Error al actualizar');
@@ -424,7 +430,7 @@ export const AdminPage: React.FC = () => {
       } else {
         const resp = await fetch(API_CATALOGO, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(payload),
         });
         if (!resp.ok) throw new Error('Error al crear');
@@ -456,8 +462,12 @@ export const AdminPage: React.FC = () => {
   const ejecutarEliminarProducto = async (id: number) => {
     try {
       setEjecutandoConfirmacion(true);
+      const token = localStorage.getItem('token');
       const resp = await fetch(`${API_CATALOGO}/${id}`, {
         method: 'DELETE',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
       if (!resp.ok) throw new Error('Error al eliminar');
 
@@ -466,6 +476,8 @@ export const AdminPage: React.FC = () => {
         mensaje: 'Producto eliminado correctamente de la base de datos.',
         tipo: 'exito',
       });
+
+      
     } catch (error) {
       console.error(error);
       setAlerta({

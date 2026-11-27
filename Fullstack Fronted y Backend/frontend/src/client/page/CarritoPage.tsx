@@ -737,6 +737,45 @@ interface ModalPagoProps {
   onPagoExitoso: (metodoPago: string) => void;
 }
 
+const validarNumeroTarjeta = (valor: string): boolean => {
+  const soloDigitos = valor.replace(/\s+/g, '');
+  return /^\d{13,19}$/.test(soloDigitos);
+};
+
+const validarNombreTitular = (valor: string): boolean => {
+  const limpio = valor.trim();
+  return limpio.length >= 2 && /^[a-zA-ZÁÉÍÓÚÜÑáéíóúüñ\s]+$/.test(limpio);
+};
+
+const validarCvv = (valor: string): boolean => {
+  return /^\d{3,4}$/.test(valor.trim());
+};
+
+const validarRutChileno = (rut: string): boolean => {
+  const limpio = rut.replace(/\./g, '').replace(/-/g, '').trim().toUpperCase();
+  if (!/^\d{7,8}[0-9K]$/.test(limpio)) return false;
+
+  const cuerpo = limpio.slice(0, -1);
+  const dv = limpio.slice(-1);
+
+  let suma = 0;
+  let multiplicador = 2;
+
+  for (let i = cuerpo.length - 1; i >= 0; i--) {
+    suma += Number(cuerpo[i]) * multiplicador;
+    multiplicador = multiplicador === 7 ? 2 : multiplicador + 1;
+  }
+
+  const resto = 11 - (suma % 11);
+  const dvEsperado = resto === 11 ? '0' : resto === 10 ? 'K' : String(resto);
+
+  return dv === dvEsperado;
+};
+
+const validarCorreo = (correo: string): boolean => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(correo.trim());
+};
+
 const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitoso }) => {
   const [metodoPago, setMetodoPago] = useState('TARJETA');
 
@@ -750,10 +789,42 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
   const [rutTransferencia, setRutTransferencia] = useState('');
   const [correoComprobante, setCorreoComprobante] = useState('');
 
+  const [errorValidacion, setErrorValidacion] = useState<string | null>(null);
   const [cargandoPago, setCargandoPago] = useState(false);
 
   const handleSubmitPago = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorValidacion(null);
+
+    if (metodoPago === 'TARJETA' || metodoPago === 'WEBPAY') {
+      if (!validarNumeroTarjeta(numeroTarjeta)) {
+        setErrorValidacion('El número de tarjeta debe contener entre 13 y 19 dígitos numéricos.');
+        return;
+      }
+
+      if (!validarNombreTitular(nombreTitular)) {
+        setErrorValidacion('El nombre del titular solo debe contener letras y espacios.');
+        return;
+      }
+
+      if (!validarCvv(cvv)) {
+        setErrorValidacion('El CVV debe contener 3 o 4 dígitos numéricos.');
+        return;
+      }
+    }
+
+    if (metodoPago === 'TRANSFERENCIA') {
+      if (!validarRutChileno(rutTransferencia)) {
+        setErrorValidacion('Ingresa un RUT válido (ej. 12.345.678-9).');
+        return;
+      }
+
+      if (!validarCorreo(correoComprobante)) {
+        setErrorValidacion('Ingresa un correo electrónico válido para el comprobante.');
+        return;
+      }
+    }
+
     setCargandoPago(true);
 
     setTimeout(() => {
@@ -799,6 +870,7 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
             Pasarela de Pagos
           </h3>
           <button
+            type="button"
             onClick={onClose}
             style={{
               background: 'none',
@@ -829,6 +901,7 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
 
         <form
           onSubmit={handleSubmitPago}
+          noValidate
           style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}
         >
           <div>
@@ -845,7 +918,10 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
             </label>
             <select
               value={metodoPago}
-              onChange={(e) => setMetodoPago(e.target.value)}
+              onChange={(e) => {
+                setErrorValidacion(null);
+                setMetodoPago(e.target.value);
+              }}
               style={{
                 width: '100%',
                 padding: '10px',
@@ -877,10 +953,11 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
                 </label>
                 <input
                   type="text"
+                  inputMode="numeric"
                   placeholder="4000 1234 5678 9010"
-                  maxLength={19}
+                  maxLength={23}
                   value={numeroTarjeta}
-                  onChange={(e) => setNumeroTarjeta(e.target.value)}
+                  onChange={(e) => setNumeroTarjeta(e.target.value.replace(/[^\d\s]/g, ''))}
                   required
                   style={{
                     width: '100%',
@@ -907,9 +984,11 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
                   </label>
                   <input
                     type="text"
-                    placeholder=""
+                    placeholder="Nombre y Apellido"
                     value={nombreTitular}
-                    onChange={(e) => setNombreTitular(e.target.value)}
+                    onChange={(e) =>
+                      setNombreTitular(e.target.value.replace(/[^a-zA-ZÁÉÍÓÚÜÑáéíóúüñ\s]/g, ''))
+                    }
                     required
                     style={{
                       width: '100%',
@@ -934,10 +1013,11 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
                   </label>
                   <input
                     type="password"
+                    inputMode="numeric"
                     placeholder="123"
                     maxLength={4}
                     value={cvv}
-                    onChange={(e) => setCvv(e.target.value)}
+                    onChange={(e) => setCvv(e.target.value.replace(/\D/g, ''))}
                     required
                     style={{
                       width: '100%',
@@ -1002,7 +1082,7 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
                   type="text"
                   placeholder="12.345.678-9"
                   value={rutTransferencia}
-                  onChange={(e) => setRutTransferencia(e.target.value)}
+                  onChange={(e) => setRutTransferencia(e.target.value.replace(/[^0-9kK.\-]/g, ''))}
                   required
                   style={{
                     width: '100%',
@@ -1042,6 +1122,21 @@ const ModalPagoLocal: React.FC<ModalPagoProps> = ({ total, onClose, onPagoExitos
                 />
               </div>
             </>
+          )}
+
+          {errorValidacion && (
+            <div
+              style={{
+                backgroundColor: '#fed7d7',
+                color: '#9b2c2c',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: '600',
+              }}
+            >
+              {errorValidacion}
+            </div>
           )}
 
           <button
